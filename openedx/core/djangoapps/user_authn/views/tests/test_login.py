@@ -1,6 +1,7 @@
 """
 Tests for student activation and login
 """
+import ddt
 import json
 import unittest
 
@@ -15,8 +16,9 @@ from mock import patch
 from six import text_type
 
 from openedx.core.djangoapps.external_auth.models import ExternalAuthMap
-from openedx.core.djangoapps.user_api.config.waffle import PREVENT_AUTH_USER_WRITES, waffle
+from openedx.core.djangoapps.user_api.config.waffle import PASSWORD_UNICODE_NORMALIZE,  PREVENT_AUTH_USER_WRITES, waffle
 from openedx.core.djangoapps.user_authn.cookies import jwt_cookies
+from openedx.core.djangoapps.waffle_utils.testutils import override_waffle_flag
 from openedx.core.djangoapps.user_authn.tests.utils import setup_login_oauth_client
 from openedx.core.djangoapps.user_authn.waffle import JWT_COOKIES_FLAG
 from openedx.core.djangoapps.password_policy.compliance import (
@@ -478,6 +480,20 @@ class LoginTest(CacheIsolationTestCase):
             response_content = json.loads(response.content)
             self.assertIn('Test warning', self.client.session['_messages'])
         self.assertTrue(response_content.get('success'))
+
+    @override_waffle_flag(PASSWORD_UNICODE_NORMALIZE, active=True)
+    @ddt.data(
+        ('test_password', 'test_password', 200)
+    )
+    @ddt.unpack
+    def test_password_unicode_normalization_login(self, password, password_entered, status_code):
+        """
+        Tests unicode normalization on user's passwords on login.
+        """
+        self.user.set_password(password)
+        self.user.save()
+        response = self.client.post(reverse('login'), {'email': self.user.email, 'password': password_entered})
+        self.assertEqual(response.status_code, status_code)
 
     def _login_response(self, email, password, patched_audit_log=None, extra_post_params=None):
         """
